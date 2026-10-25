@@ -466,7 +466,7 @@ async def test_agent_loop_extra_fields_schema_stable_for_training_concat_on_cpu(
 
 
 def test_agent_loop_output_as_dict_scores_last_generated_token():
-    # A multi-turn trajectory can end with a chat-template suffix (response_mask=0).
+    """as_dict puts the score on the last generated token, not on a trailing response_mask=0 token."""
     output = AgentLoopOutput(
         prompt_ids=[101, 102],
         response_ids=[11, 12, 13, 14],
@@ -481,6 +481,7 @@ def test_agent_loop_output_as_dict_scores_last_generated_token():
 
 
 def test_agent_loop_postprocess_scores_last_generated_token():
+    """_postprocess puts the score of each row on its last generated token, or on its last valid token."""
     rows = [
         # (response_ids, response_mask, expected score index)
         ([11, 12, 13], [1, 1, 0], 1),  # trailing chat-template suffix

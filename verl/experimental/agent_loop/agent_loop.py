@@ -115,7 +115,11 @@ class AgentLoopOutput(BaseModel):
     (OPD) path so an SGLang teacher receives the video instead of raw frames. None otherwise."""
 
     def as_dict(self) -> dict[str, Any]:
-        """Convert agent loop output to a dictionary."""
+        """Convert agent loop output to a dictionary.
+
+        ``rm_scores`` holds ``reward_score`` on the last token with ``response_mask`` 1. If no token has
+        ``response_mask`` 1, the score is on the last token.
+        """
         output = self.model_dump(exclude_unset=True)
 
         output["prompts"] = torch.tensor(output.pop("prompt_ids"), dtype=torch.int64)
@@ -1093,7 +1097,11 @@ class AgentLoopWorker:
         input_non_tensor_batch: dict | None = None,
         validate: bool = False,
     ) -> DataProto:
-        """Process the padded outputs from _run_agent_loop and combine them into a batch."""
+        """Process the padded outputs from _run_agent_loop and combine them into a batch.
+
+        In each row of ``rm_scores``, ``reward_score`` is on the last token with ``response_mask`` 1. If a
+        row has no such token, the score is on the last valid token of the row.
+        """
         # Convert lists back to tensors and stack them to create a batch.
         prompt_ids = torch.cat([input.prompt_ids for input in inputs], dim=0)
         response_ids = torch.cat([input.response_ids for input in inputs], dim=0)
