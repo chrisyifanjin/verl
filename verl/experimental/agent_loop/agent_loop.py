@@ -140,11 +140,13 @@ class AgentLoopOutput(BaseModel):
             aligned[:num_rows] = routed_experts[:num_rows]
             output["routed_experts"] = aligned
 
-        # rm_scores: reward score for each token
+        # rm_scores: reward score for each token, put on the last generated token. GAE, REINFORCE++,
+        # ReMax and OTB ignore rewards on response_mask=0 tokens, such as a trailing chat-template suffix.
         reward_score = output.pop("reward_score", None)
         if reward_score is not None:
             rm_scores = torch.zeros_like(output["response_mask"], dtype=torch.float32)
-            rm_scores[-1] = reward_score
+            generated = output["response_mask"].nonzero()
+            rm_scores[generated[-1] if len(generated) else -1] = reward_score
             output["rm_scores"] = rm_scores
 
         # Mutating a default dict does not add the field to Pydantic's fields-set,
@@ -1125,8 +1127,13 @@ class AgentLoopWorker:
         if all(score is not None for score in scores):
             prompt_length = prompt_ids.size(1)
             response_length = attention_mask[:, prompt_length:].sum(dim=1) - 1
+            # Put the score on the last generated token. GAE, REINFORCE++, ReMax and OTB ignore rewards
+            # on response_mask=0 tokens, such as a trailing chat-template suffix.
+            positions = torch.arange(response_mask.size(1))
+            last_generated = torch.where(response_mask.bool(), positions, -1).amax(dim=1)
+            score_index = torch.where(last_generated >= 0, last_generated, response_length)
             rm_scores = torch.zeros_like(response_mask, dtype=torch.float32)
-            rm_scores[torch.arange(response_mask.size(0)), response_length] = torch.tensor(scores, dtype=torch.float32)
+            rm_scores[torch.arange(response_mask.size(0)), score_index] = torch.tensor(scores, dtype=torch.float32)
             batch["rm_scores"] = rm_scores
 
         non_tensor_batch = {
